@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>SamBand - Versão Web</title>
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    background: #fff;
+    margin: 0;
+    padding: 20px;
+  }
+  .container {
+    max-width: 400px;
+    margin: auto;
+  }
+  h1 {
+    text-align: center;
+  }
+  input {
+    width: 100%;
+    padding: 8px;
+    margin-top: 8px;
+    margin-bottom: 16px;
+    box-sizing: border-box;
+  }
+  button {
+    background-color: #3f73f1;
+    color: white;
+    border: none;
+    padding: 10px;
+    width: 100%;
+    margin-bottom: 10px;
+    cursor: pointer;
+  }
+  button.gray {
+    background-color: gray;
+  }
+  .link-button {
+    background: none;
+    border: none;
+    color: #3f73f1;
+    cursor: pointer;
+    text-decoration: underline;
+    padding: 0;
+    margin: 0 0 16px 0;
+  }
+  .setlist-item {
+    border-bottom: 1px solid #ddd;
+    padding: 10px 0;
+    display: flex;
+    justify-content: space-between;
+  }
+  .setlist-item div {
+    max-width: 70%;
+  }
+  .actions button {
+    background: none;
+    border: none;
+    color: #3f73f1;
+    margin-left: 10px;
+    cursor: pointer;
+  }
+  .actions button.delete {
+    color: red;
+  }
+  .error {
+    color: red;
+    margin-bottom: 16px;
+  }
+</style>
+</head>
+<body>
+
+<div class="container">
+
+  <!-- Login -->
+  <div id="login-screen" style="display:none;">
+    <h1>🎶SamBand</h1>
+    <input type="text" id="login-nome" placeholder="Nome da Banda" />
+    <input type="password" id="login-senha" placeholder="Senha" />
+    <button id="btn-login">Entrar</button>
+    <button class="link-button" id="btn-go-register">Registrar Banda</button>
+    <div id="login-error" class="error"></div>
+  </div>
+
+  <!-- Registro -->
+  <div id="register-screen" style="display:none;">
+    <h1>🎶 SamBand</h1>
+    <input type="text" id="register-nome" placeholder="Nome da Banda" />
+    <input type="password" id="register-senha" placeholder="Senha" />
+    <button id="btn-register">Registrar Banda</button>
+    <button class="link-button" id="btn-go-login">Já tem conta? Faça login</button>
+    <div id="register-error" class="error"></div>
+  </div>
+
+  <!-- Setlist -->
+  <div id="setlist-screen" style="display:none;">
+    <h1 id="setlist-title">Repertório da Banda</h1>
+
+    <input type="text" id="musica-nome" placeholder="Nome da Música" />
+    <input type="text" id="musica-link" placeholder="Link da Música (opcional)" />
+    <button id="btn-add-update-music">Adicionar Música</button>
+
+    <div id="setlist-error" class="error"></div>
+
+    <div id="setlist-list"></div>
+
+    <button class="gray" id="btn-logout">Sair</button>
+  </div>
+
+</div>
+
+<script>
+  const apiBase = 'https://myband.up.railway.app';
+
+  // Elementos
+  const loginScreen = document.getElementById('login-screen');
+  const registerScreen = document.getElementById('register-screen');
+  const setlistScreen = document.getElementById('setlist-screen');
+
+  // Login inputs
+  const loginNome = document.getElementById('login-nome');
+  const loginSenha = document.getElementById('login-senha');
+  const loginError = document.getElementById('login-error');
+
+  // Register inputs
+  const registerNome = document.getElementById('register-nome');
+  const registerSenha = document.getElementById('register-senha');
+  const registerError = document.getElementById('register-error');
+
+  // Setlist inputs
+  const musicaNome = document.getElementById('musica-nome');
+  const musicaLink = document.getElementById('musica-link');
+  const btnAddUpdate = document.getElementById('btn-add-update-music');
+  const setlistList = document.getElementById('setlist-list');
+  const setlistTitle = document.getElementById('setlist-title');
+  const setlistError = document.getElementById('setlist-error');
+  const btnLogout = document.getElementById('btn-logout');
+
+  // Navigation buttons
+  document.getElementById('btn-go-register').onclick = () => {
+    showScreen('register');
+    clearErrors();
+  };
+  document.getElementById('btn-go-login').onclick = () => {
+    showScreen('login');
+    clearErrors();
+  };
+
+  // State
+  let bandaId = null;
+  let nomeBanda = '';
+  let editandoId = null;
+  let setlist = [];
+
+  // Helpers
+  function showScreen(screen) {
+    loginScreen.style.display = 'none';
+    registerScreen.style.display = 'none';
+    setlistScreen.style.display = 'none';
+    clearErrors();
+    if(screen === 'login') loginScreen.style.display = 'block';
+    else if(screen === 'register') registerScreen.style.display = 'block';
+    else if(screen === 'setlist') setlistScreen.style.display = 'block';
+  }
+
+  function clearErrors() {
+    loginError.textContent = '';
+    registerError.textContent = '';
+    setlistError.textContent = '';
+  }
+
+  function alertMessage(msg) {
+    alert(msg);
+  }
+
+  // Login
+  async function handleLogin() {
+    clearErrors();
+    if(!loginNome.value.trim() || !loginSenha.value.trim()) {
+      loginError.textContent = 'Por favor, preencha todos os campos.';
+      return;
+    }
+    try {
+      const res = await fetch(`${apiBase}/login`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({nome: loginNome.value.trim(), senha: loginSenha.value.trim()})
+      });
+      const data = await res.json();
+      if(data.banda_id) {
+        bandaId = data.banda_id;
+        nomeBanda = loginNome.value.trim();
+        localStorage.setItem('userToken', bandaId.toString());
+        alertMessage('Login bem-sucedido!');
+        showSetlist();
+      } else {
+        loginError.textContent = 'Credenciais inválidas.';
+      }
+    } catch(e) {
+      loginError.textContent = 'Falha ao conectar com o servidor.';
+    }
+  }
+
+  // Register
+  async function handleRegister() {
+    clearErrors();
+    if(!registerNome.value.trim() || !registerSenha.value.trim()) {
+      registerError.textContent = 'Por favor, preencha todos os campos.';
+      return;
+    }
+    try {
+      const res = await fetch(`${apiBase}/register`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({nome: registerNome.value.trim(), senha: registerSenha.value.trim()})
+      });
+      const data = await res.json();
+      alertMessage(data.message || 'Registro realizado com sucesso!');
+      showScreen('login');
+    } catch(e) {
+      registerError.textContent = 'Falha ao conectar com o servidor.';
+    }
+  }
+
+  // Setlist: carregar lista
+  async function carregarSetlist() {
+    setlistError.textContent = '';
+    try {
+      const res = await fetch(`${apiBase}/setlist/${bandaId}`);
+      const data = await res.json();
+      setlist = data;
+      renderSetlist();
+    } catch {
+      setlistError.textContent = 'Não foi possível carregar a setlist.';
+    }
+  }
+
+  function renderSetlist() {
+    setlistList.innerHTML = '';
+    setlist.forEach(item => {
+      const div = document.createElement('div');
+      div.className = 'setlist-item';
+
+      const infoDiv = document.createElement('div');
+      const nomeMusica = document.createElement('div');
+      nomeMusica.textContent = item.nome_musica;
+      infoDiv.appendChild(nomeMusica);
+      if(item.link) {
+        const linkMusica = document.createElement('div');
+        linkMusica.style.color = '#3f73f1';
+        linkMusica.textContent = item.link;
+        infoDiv.appendChild(linkMusica);
+      }
+
+      const actionsDiv = document.createElement('div');
+      actionsDiv.className = 'actions';
+
+      const btnEdit = document.createElement('button');
+      btnEdit.textContent = 'Editar';
+      btnEdit.onclick = () => {
+        musicaNome.value = item.nome_musica;
+        musicaLink.value = item.link || '';
+        editandoId = item.id;
+        btnAddUpdate.textContent = 'Atualizar Música';
+      };
+      actionsDiv.appendChild(btnEdit);
+
+      const btnDelete = document.createElement('button');
+      btnDelete.textContent = 'Excluir';
+      btnDelete.className = 'delete';
+      btnDelete.onclick = () => {
+        removerMusica(item.id);
+      };
+      actionsDiv.appendChild(btnDelete);
+
+      div.appendChild(infoDiv);
+      div.appendChild(actionsDiv);
+      setlistList.appendChild(div);
+    });
+  }
+
+  // Adicionar ou atualizar música
+  async function adicionarOuAtualizarMusica() {
+    setlistError.textContent = '';
+    const nome = musicaNome.value.trim();
+    const link = musicaLink.value.trim();
+    if(!nome) {
+      setlistError.textContent = 'Informe o nome da música.';
+      return;
+    }
+
+    const payload = { nome_musica: nome, link: link || '' };
+    if(!editandoId) {
+      payload.banda_id = bandaId;
+    }
+
+    try {
+      if(editandoId) {
+        await fetch(`${apiBase}/setlist/${editandoId}`, {
+          method: 'PUT',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify(payload)
+        });
+      } else {
+        await fetch(`${apiBase}/setlist`, {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify(payload)
+        });
+      }
+      musicaNome.value = '';
+      musicaLink.value = '';
+      editandoId = null;
+      btnAddUpdate.textContent = 'Adicionar Música';
+      await carregarSetlist();
+    } catch {
+      setlistError.textContent = editandoId ? 'Erro ao atualizar música.' : 'Erro ao adicionar música.';
+    }
+  }
+
+  // Remover música
+  async function removerMusica(id) {
+    try {
+      await fetch(`${apiBase}/setlist/${id}`, { method: 'DELETE' });
+      setlist = setlist.filter(m => m.id !== id);
+      renderSetlist();
+    } catch {
+      setlistError.textContent = 'Erro ao excluir música.';
+    }
+  }
+
+  // Logout
+  function logout() {
+    localStorage.removeItem('userToken');
+    bandaId = null;
+    nomeBanda = '';
+    showScreen('login');
+  }
+
+  // Mostrar setlist
+  async function showSetlist() {
+    setlistTitle.textContent = `Repertório da Banda: ${nomeBanda}`;
+    showScreen('setlist');
+await carregarSetlist();
+}
+
+// Eventos
+document.getElementById('btn-login').onclick = handleLogin;
+document.getElementById('btn-register').onclick = handleRegister;
+btnAddUpdate.onclick = adicionarOuAtualizarMusica;
+btnLogout.onclick = logout;
+
+// Auto login se token existir
+window.onload = () => {
+const storedId = localStorage.getItem('userToken');
+if(storedId) {
+bandaId = storedId;
+nomeBanda = 'Sua Banda'; // Opcional: salvar nome real após login
+showSetlist();
+} else {
+showScreen('login');
+}
+};
+</script>
+
+</body> </html>
